@@ -55,5 +55,3 @@ numpy<2.0.0
 google-cloud-translate==3.21.1
 pillow>=10.1.0
 opencv-python==4.9.0.80
-torch==2.2.0
-torchvision==0.17.0
