@@ -1,0 +1,44 @@
+---
+version: "2"
+plugins:
+  duplication:
+    enabled: true
+    config:
+      languages:
+        - javascript
+        - python
+        - java
+  eslint:
+    enabled: true
+    channel: "stable"
+  fixme:
+    enabled: true
+  sonar-java:
+    enabled: true
+    config:
+      sonar.java.source: "8"
+      minimum_severity: minor
+  sonar-python:
+    enabled: true
+    config:
+      minimum_severity: minor
+exclude_patterns:
+  - config/
+  - db/
+  - dist/
+  - features/
+  - .venv
+  - venv
+  - "**/node_modules/"
+  - script/
+  - "**/spec/"
+  - "**/test/"
+  - "**/tests/"
+  - Tests/
+  - "**/vendor/"
+  - "**/*_test.go"
+  - "**/*.d.ts"
+  - "**/*.min.js"
+  - "**/*.min.css"
+  - "**/__tests__/"
+  - "**/__mocks__/"

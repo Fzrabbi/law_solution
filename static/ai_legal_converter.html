@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bangla Legal Case Converter</title>
+    <!-- Load Tailwind CSS for easy styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#1e3a8a', // Dark blue
+                        'secondary': '#fcd34d', // Amber/Yellow
+                    }
+                },
+                fontFamily: {
+                    sans: ['Inter', ' '],
+                },
+            }
+        }
+    </script>
+    <style>
+        /* Custom styles for better aesthetics and mobile view */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f1f5f9; /* Slate 100 */
+        }
+        .card {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s ease;
+        }
+        .card:hover {
+            transform: translateY(-2px);
+        }
+        /* Ensure the body takes up the full viewport height */
+        .min-h-screen {
+            min-height: 100vh;
+        }
+        /* Style adjustments for better touch target size on mobile */
+        #submitButton {
+            min-height: 3rem; /* Minimum height for better touch target */
+        }
+        /* Hide file input text on small screens, showing only the button/area */
+        @media (max-width: 640px) {
+            .file\:text-sm {
+                font-size: 0.875rem;
+            }
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+    <div class="card w-full max-w-xl p-6 md:p-8 bg-white rounded-xl border border-gray-200">
+        <h1 class="text-2xl md:text-3xl font-extrabold text-primary mb-2 text-center">Legal Document Translator</h1>
+        <p class="text-sm md:text-base text-gray-500 mb-6 md:mb-8 text-center">Upload your Bangla PDF to convert it to a formatted English DOCX.</p>
+
+        <!-- File Upload Form -->
+        <form id="uploadForm" class="space-y-6">
+            
+            <!-- File Input -->
+            <div>
+                <label for="pdfFile" class="block text-sm font-medium text-gray-700 mb-2">Select PDF File (Bangla)</label>
+                <input 
+                    type="file" 
+                    id="pdfFile" 
+                    name="file"
+                    accept="application/pdf" 
+                    required 
+                    class="block w-full text-sm text-gray-500
+                           file:mr-4 file:py-2 file:px-4
+                           file:rounded-lg file:border-0
+                           file:text-sm file:font-semibold
+                           file:bg-primary/10 file:text-primary
+                           hover:file:bg-primary/20
+                           transition duration-150 ease-in-out"
+                >
+            </div>
+
+            <!-- Submit Button -->
+            <button 
+                type="submit" 
+                id="submitButton"
+                class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg 
+                       shadow-lg text-lg font-medium text-white bg-primary 
+                       hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 
+                       focus:ring-primary transition duration-150 ease-in-out disabled:opacity-50"
+            >
+                Convert and Download
+            </button>
+        </form>
+
+        <!-- Status Message Area -->
+        <div id="statusMessage" class="mt-6 p-4 rounded-xl text-center border-l-4 border-gray-400 hidden" role="alert">
+            <!-- Messages will be inserted here -->
+        </div>
+        
+    </div>
+
+    <script>
+        const form = document.getElementById('uploadForm');
+        const fileInput = document.getElementById('pdfFile');
+        const submitButton = document.getElementById('submitButton');
+        const statusMessage = document.getElementById('statusMessage');
+
+        // Base URL for the FastAPI service endpoint for conversion.
+        const API_ENDPOINT = '/convert-case-file/'; 
+
+        /**
+         * Clears and updates the status message area.
+         * @param {string} message - The text to display.
+         * @param {string} type - 'success', 'error', or 'loading'
+         */
+        function updateStatus(message, type) {
+            // Reset classes
+            statusMessage.textContent = message;
+            statusMessage.className = 'mt-6 p-4 rounded-xl text-center border-l-4'; 
+            
+            switch (type) {
+                case 'loading':
+                    statusMessage.classList.add('bg-secondary/10', 'text-gray-800', 'border-secondary', 'animate-pulse');
+                    submitButton.disabled = true;
+                    submitButton.textContent = 'Processing document... Please wait.';
+                    break;
+                case 'success':
+                    statusMessage.classList.add('bg-green-100', 'text-green-800', 'border-green-500');
+                    submitButton.disabled = false;
+                    submitButton.textContent = 'Conversion Successful! Click to Download Again';
+                    break;
+                case 'error':
+                    statusMessage.classList.add('bg-red-100', 'text-red-800', 'border-red-500');
+                    submitButton.disabled = false;
+                    submitButton.textContent = 'Convert and Download';
+                    break;
+                default:
+                    // Default state or clear
+                    statusMessage.classList.add('hidden');
+                    submitButton.disabled = false;
+                    submitButton.textContent = 'Convert and Download';
+                    return;
+            }
+            statusMessage.classList.remove('hidden');
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (fileInput.files.length === 0) {
+                updateStatus('Please select a PDF file before submitting.', 'error');
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            // Start the loading state
+            updateStatus('Starting upload and translation...', 'loading');
+
+            // --- Exponential Backoff Fetch Logic ---
+            const maxRetries = 3;
+            let currentRetry = 0;
+            let response = null;
+            let success = false;
+
+            while (currentRetry < maxRetries && !success) {
+                try {
+                    // Set delay for exponential backoff (1s, 2s, 4s)
+                    if (currentRetry > 0) {
+                        const delay = Math.pow(2, currentRetry) * 1000;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        updateStatus(`Retrying (${currentRetry}/${maxRetries - 1})...`, 'loading');
+                    }
+
+                    response = await fetch(API_ENDPOINT, {
+                        method: 'POST',
+                        body: formData,
+                    });
+                    
+                    if (response.ok) {
+                        success = true; // Exit the loop on success
+                    } else if (response.status !== 429 && response.status < 500) {
+                        // For client errors (4xx, except 429 for rate limit), don't retry
+                        break; 
+                    }
+                } catch (error) {
+                    console.error('Fetch error attempt:', currentRetry + 1, error);
+                    // Continue to next retry
+                }
+                currentRetry++;
+            }
+            // --- End Exponential Backoff Fetch Logic ---
+            
+            if (!response || !response.ok) {
+                // Handle final failure
+                let errorMessage = 'Server did not respond.';
+                try {
+                    if (response) {
+                        const errorDetails = await response.json();
+                        errorMessage = errorDetails.detail || `Server responded with status: ${response.status}`;
+                    }
+                } catch (e) {
+                    // Handle non-JSON response errors
+                    errorMessage = `Server error (${response ? response.status : 'No Response'}).`;
+                }
+                updateStatus(`Error: ${errorMessage}`, 'error');
+                return;
+            }
+
+            // Success handling: Get the content disposition header to extract the filename
+            try {
+                const contentDisposition = response.headers.get('Content-Disposition');
+                let filename = 'translated_document.docx'; 
+                
+                if (contentDisposition) {
+                    const match = contentDisposition.match(/filename="(.+)"/i);
+                    if (match && match[1]) {
+                        // Decode potential URL-encoded filename if necessary, but usually standard
+                        filename = decodeURIComponent(match[1]); 
+                    }
+                }
+
+                // The response is a binary file (Blob)
+                const blob = await response.blob();
+                
+                // Create a temporary URL for the blob
+                const url = window.URL.createObjectURL(blob);
+                
+                // Create a temporary link element and trigger the download
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = filename; // Set the downloaded file name
+                document.body.appendChild(a);
+                a.click();
+                
+                // Clean up the temporary URL and link element
+                window.URL.revokeObjectURL(url);
+                a.remove();
+                
+                updateStatus(`Successfully translated and downloaded: ${filename}`, 'success');
+
+            } catch (error) {
+                console.error('Download processing error:', error);
+                updateStatus(`Conversion succeeded, but an error occurred during download. Check console.`, 'error');
+            }
+        });
+
+    </script>
+</body>
+</html>

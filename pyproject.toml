@@ -1,0 +1,12 @@
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "--cov --cov-report term --cov-report html:coverage --junitxml=coverage/junit.xml"
+testpaths = [
+    "tests",
+    "main_test.py",
+]
+
+[tool.coverage.run]
+omit = [
+    "main_test.py"
+]
